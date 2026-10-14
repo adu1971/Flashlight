@@ -217,7 +217,7 @@ private fun FlashlightScreen() {
                     )
                 }
                 Text(
-                    "Double-press Volume Up to switch the flashlight on or off. Volume Up is reserved for this shortcut while it is enabled.",
+                    "Double-press Volume Up to switch the flashlight on or off. A single press adjusts the volume after a short delay; holding it raises the volume.",
                     modifier = Modifier.padding(top = 12.dp),
                     color = Muted,
                     fontSize = 14.sp,

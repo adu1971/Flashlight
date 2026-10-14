@@ -1,12 +1,39 @@
 package com.adu.flashlight
 
 import android.accessibilityservice.AccessibilityService
+import android.media.AudioManager
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
 
 class FlashlightAccessibilityService : AccessibilityService() {
-    private var lastVolumeUpPress = 0L
+    private val handler = Handler(Looper.getMainLooper())
+    private var pendingVolumeUpPress: Long? = null
+    private var suppressCurrentPress = false
+    private val singlePress = Runnable { finishSinglePress() }
+
+    private fun raiseVolume() {
+        getSystemService(AudioManager::class.java).adjustSuggestedStreamVolume(
+            AudioManager.ADJUST_RAISE,
+            AudioManager.USE_DEFAULT_STREAM_TYPE,
+            AudioManager.FLAG_SHOW_UI or AudioManager.FLAG_PLAY_SOUND
+        )
+    }
+
+    private fun finishSinglePress() {
+        if (pendingVolumeUpPress == null) return
+        handler.removeCallbacks(singlePress)
+        pendingVolumeUpPress = null
+        raiseVolume()
+    }
+
+    private fun clearPendingPress() {
+        handler.removeCallbacks(singlePress)
+        pendingVolumeUpPress = null
+    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -17,13 +44,30 @@ class FlashlightAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() = Unit
 
+    override fun onDestroy() {
+        clearPendingPress()
+        super.onDestroy()
+    }
+
     override fun onKeyEvent(event: KeyEvent): Boolean {
-        if (event.keyCode != KeyEvent.KEYCODE_VOLUME_UP) return false
+        if (event.keyCode != KeyEvent.KEYCODE_VOLUME_UP) {
+            // Preserve the ordering when Volume Down follows a single Volume Up.
+            if (event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN &&
+                event.action == KeyEvent.ACTION_DOWN) {
+                finishSinglePress()
+            }
+            return false
+        }
 
         if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-            val now = android.os.SystemClock.elapsedRealtime()
-            if (now - lastVolumeUpPress in 1..DOUBLE_PRESS_WINDOW_MS) {
-                lastVolumeUpPress = 0L
+            // Start the window when the service receives the press. Key events
+            // may already be old by the time accessibility dispatches them.
+            val now = SystemClock.elapsedRealtime()
+            val previousPress = pendingVolumeUpPress
+            suppressCurrentPress = false
+            if (previousPress != null && now - previousPress in 0..DOUBLE_PRESS_WINDOW_MS) {
+                clearPendingPress()
+                suppressCurrentPress = true
                 if (!FlashlightController.toggle()) {
                     Toast.makeText(
                         this,
@@ -32,9 +76,18 @@ class FlashlightAccessibilityService : AccessibilityService() {
                     ).show()
                 }
             } else {
-                lastVolumeUpPress = now
+                finishSinglePress()
+                pendingVolumeUpPress = now
+                handler.postDelayed(singlePress, DOUBLE_PRESS_WINDOW_MS)
             }
+        } else if (event.action == KeyEvent.ACTION_DOWN && !suppressCurrentPress) {
+            // A held key is a volume adjustment, not another shortcut press.
+            finishSinglePress()
+            raiseVolume()
+        } else if (event.action == KeyEvent.ACTION_UP) {
+            suppressCurrentPress = false
         }
+        // Consume both down and up; single presses are handled through AudioManager.
         return true
     }
 
