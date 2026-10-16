@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId = "com.adu.flashlight"
-        minSdk = 35
+        minSdk = 33
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"

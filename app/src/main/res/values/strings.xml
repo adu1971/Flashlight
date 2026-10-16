@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">Flashlight</string>
-    <string name="accessibility_service_description">Double-press Volume Up to turn the flashlight on or off.</string>
+    <string name="accessibility_service_description">Tap the accessibility button or double-press Volume Up to turn the flashlight on or off.</string>
 </resources>
